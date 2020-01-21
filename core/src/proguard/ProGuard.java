@@ -36,6 +36,9 @@ import proguard.util.*;
 
 import java.io.*;
 
+import static proguard.Profiler.*;
+import static proguard.Lambda.*;
+
 /**
  * Tool for shrinking, optimizing, obfuscating, and preverifying Java classes.
  *
@@ -72,14 +75,16 @@ public class ProGuard
     {
         System.out.println(VERSION);
 
-        GPL.check();
+        timing("Check GPL", GPL::check);
 
         if (configuration.printConfiguration != null)
         {
-            printConfiguration();
+            timing("printConfiguration", () -> unchecked(this::printConfiguration));
         }
 
-        new ConfigurationChecker(configuration).check();
+        timing("Check Configuration", () -> unchecked(() -> {
+            new ConfigurationChecker(configuration).check();
+        }));
 
         if (configuration.programJars != null     &&
             configuration.programJars.hasOutput() &&
@@ -100,7 +105,7 @@ public class ProGuard
             configuration.obfuscate ||
             configuration.preverify)
         {
-            clearPreverification();
+            timing("clearPreverification", () -> unchecked(this::clearPreverification));
         }
 
         if (configuration.printSeeds != null ||
@@ -110,91 +115,94 @@ public class ProGuard
             configuration.preverify ||
             configuration.backport)
         {
-            initialize();
+            timing("initialize", () -> unchecked(this::initialize));
         }
 
         if (configuration.obfuscate ||
             configuration.optimize)
         {
-            introducePrimitiveArrayConstants();
+            timing("introducePrimitiveArrayConstants", () -> unchecked(this::introducePrimitiveArrayConstants));
         }
 
         if (configuration.backport)
         {
-            backport();
+            timing("backport", () -> unchecked(this::backport));
         }
 
         if (configuration.addConfigurationDebugging)
         {
-            addConfigurationLogging();
+            timing("addConfigurationLogging", () -> unchecked(this::addConfigurationLogging));
         }
 
         if (configuration.printSeeds != null)
         {
-            printSeeds();
+            timing("printSeeds", () -> unchecked(this::printSeeds));
         }
 
         if (configuration.preverify ||
             configuration.android)
         {
-            inlineSubroutines();
+            timing("inlineSubroutines", () -> unchecked(this::inlineSubroutines));
         }
 
         if (configuration.shrink)
         {
-            shrink();
+            timing("shrink", () -> unchecked(this::shrink));
         }
 
         if (configuration.optimize)
         {
-            for (int optimizationPass = 0;
-                 optimizationPass < configuration.optimizationPasses;
-                 optimizationPass++)
-            {
-                if (!optimize(optimizationPass+1, configuration.optimizationPasses))
+            timing("optimize & shrink", () -> unchecked(() -> {
+                for (int optimizationPass = 0;
+                     optimizationPass < configuration.optimizationPasses;
+                     optimizationPass++)
                 {
-                    // Stop optimizing if the code doesn't improve any further.
-                    break;
+                    if (!optimize(optimizationPass+1, configuration.optimizationPasses))
+                    {
+                        // Stop optimizing if the code doesn't improve any further.
+                        break;
+                    }
+
+                    // Shrink again, if we may.
+                    if (configuration.shrink)
+                    {
+                        // Don't print any usage this time around.
+                        configuration.printUsage       = null;
+                        configuration.whyAreYouKeeping = null;
+
+                        shrink();
+                    }
                 }
 
-                // Shrink again, if we may.
-                if (configuration.shrink)
-                {
-                    // Don't print any usage this time around.
-                    configuration.printUsage       = null;
-                    configuration.whyAreYouKeeping = null;
+                linearizeLineNumbers();
 
-                    shrink();
-                }
-            }
-
-            linearizeLineNumbers();
+            }));
         }
 
         if (configuration.obfuscate)
         {
-            obfuscate();
+            timing("obfuscate", () -> unchecked(this::obfuscate));
         }
 
         if (configuration.optimize ||
             configuration.obfuscate)
         {
-            expandPrimitiveArrayConstants();
+            timing("expandPrimitiveArrayConstants", () -> unchecked(this::expandPrimitiveArrayConstants));
         }
 
         if (configuration.optimize)
         {
-            trimLineNumbers();
+            timing("trimLineNumbers", () -> unchecked(this::trimLineNumbers));
         }
 
         if (configuration.targetClassVersion != 0)
         {
-            target();
+            timing("target", () -> unchecked(this::target));
         }
 
         if (configuration.preverify)
         {
-            preverify();
+            timing("preverify", () -> unchecked(this::preverify));
         }
 
         if (configuration.shrink    ||
@@ -202,18 +210,20 @@ public class ProGuard
             configuration.obfuscate ||
             configuration.preverify)
         {
-            sortClassElements();
+            timing("sortClassElements", () -> unchecked(this::sortClassElements));
         }
 
         if (configuration.programJars.hasOutput())
         {
-            writeOutput();
+            timing("writeOutput", () -> unchecked(this::writeOutput));
         }
 
         if (configuration.dump != null)
         {
-            dump();
+            timing("dump", () -> unchecked(this::dump));
         }
+
+        printElapsedTime();
     }
 
 
